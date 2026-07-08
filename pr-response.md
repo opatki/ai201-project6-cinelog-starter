@@ -1,7 +1,16 @@
 # PR Response Doc — CineLog Watchlist Feature
 
 ## AI Usage
-<!-- Fill in at the end — how you used AI tools during this project -->
+
+I used Claude (via Claude Code) in two main ways on this project:
+
+1. **Codebase orientation.** Before implementing Comment 2 (deduplication), I had Claude trace how `add_to_collection()` and `AlreadyInCollectionError` were structured in `services/collection_service.py` and `routes/collection.py`, so the watchlist's dedup check and 409 handling would follow an existing convention instead of inventing a new one.
+
+2. **Stress-testing the Comment 4 and Comment 5 design arguments.** Before finalizing those responses, I gave it: *"What counterargument would a careful code reviewer raise against this position? What tradeoff am I not acknowledging?"*
+   - **Comment 4 (visibility default):** it pointed out that defaulting `public=True` creates real risk of unintentional exposure — a user could add a film without registering that it's visible to others, and a watchlist can reveal tastes/curiosities a person hasn't consciously decided to share, unlike a rated `CollectionEntry`. I hadn't separated "discovery is good for the product" from "this specific field is comfortable to have public by default." I kept `public=True` — I still think discovery outweighs the risk for this field — but folded this directly into the "Tradeoff acknowledged" section, added the scoping note that `CollectionEntry` has no `public` flag today (so this default shouldn't be assumed to carry over elsewhere), and proposed the one-time UI callout as a way to mitigate the exposure risk without abandoning the default.
+   - **Comment 5 (sort order):** it flagged that I was conflating two distinct use cases — "what do I want to watch next" (recency) vs. "did I already add this title" (lookup) — and that choosing recency-first doesn't eliminate the lookup case, it just moves it out of scope. That sharpened my final response: instead of dismissing the lookup use case, I named it explicitly and reframed it as a search/filter problem rather than a reason to change the default sort, so I wasn't silently dropping a real concern.
+
+Where I didn't use AI: the actual dedup/sort implementation and the rebase conflict resolution (Comment 6) came from reading the existing code and git history directly, not from AI suggestions.
 
 ## Comment 1 — Rename
 **What I did:** 
@@ -61,3 +70,51 @@
 
 ## PR Description
 <!-- Written at the end — feature overview, design decisions, manual testing steps -->
+
+### What this PR does
+
+Adds a watchlist feature to CineLog: users can save films they want to watch later, separate from their collection of already-watched films.
+
+- `POST /watchlist/<user_id>/add` — adds a film to a user's watchlist (body: `{ "film_id": "<uuid>" }`). Returns `404` if the film doesn't exist, `409` if it's already on the user's watchlist, `201` with the new entry otherwise.
+- `GET /watchlist/<user_id>` — returns the user's watchlist as a list of films, each annotated with `date_added` and `public`.
+
+New `WatchlistEntry` model (`models.py`) with `user_id`, `film_id`, `date_added`, and `public` columns, plus the business logic in `services/watchlist_service.py` (`add_to_watchlist`, `get_watchlist`, `AlreadyOnWatchlistError`).
+
+### Design decisions
+
+1. **Default visibility (`public=True`)** — Watchlist entries are public by default, matching CineLog's social, discovery-first model (and comparable products like Letterboxd) rather than defaulting to private. Full reasoning and the acknowledged unintentional-exposure tradeoff are in [Comment 4](#comment-4--default-visibility) above.
+2. **Sort order (newest first)** — `get_watchlist()` sorts by `date_added` descending, treating the watchlist as a queue ("what did I just decide I want to watch") rather than an alphabetical reference list, and matching the existing sort convention in `get_collection()`. Full reasoning is in [Comment 5](#comment-5--sort-order) above.
+
+### Manual testing steps
+
+There's no seed data or user/film-creation endpoint in this app, so the fastest way to get a real `user_id`/`film_id` to test against is a one-off script against the same SQLite DB the server uses.
+
+1. From the project root, create a test user and two films:
+   ```
+   python -c "
+   from app import create_app, db
+   from models import User, Film
+   app = create_app()
+   with app.app_context():
+       user = User(username='demo', email='demo@example.com')
+       film1 = Film(title='Paddington 2', year=2017, genre='Comedy')
+       film2 = Film(title='Alien', year=1979, genre='Horror')
+       db.session.add_all([user, film1, film2])
+       db.session.commit()
+       print('user_id:', user.id)
+       print('film1_id:', film1.id)
+       print('film2_id:', film2.id)
+   "
+   ```
+   Note the three printed IDs.
+2. In a separate terminal, start the server: `python app.py` (runs at `http://127.0.0.1:5000`).
+3. Add film1 to the watchlist:
+   ```
+   curl -X POST http://127.0.0.1:5000/watchlist/<user_id>/add -H "Content-Type: application/json" -d "{\"film_id\": \"<film1_id>\"}"
+   ```
+   Expect `201` with the entry JSON, including `"public": true`.
+4. Repeat the exact same request. Expect `409` with an "already on this user's watchlist" error (dedup check from Comment 2).
+5. Send the same request with a made-up film id, e.g. `"00000000-0000-0000-0000-000000000000"`. Expect `404` with a "no film found" error.
+6. Add film2 to the watchlist the same way as step 3. Expect `201`.
+7. Fetch the watchlist: `curl http://127.0.0.1:5000/watchlist/<user_id>`. Expect a list of both films, with **film2 (Alien) listed first** since it was added most recently, each entry including `date_added` and `"public": true`.
+8. Run the automated suite: `pytest tests/ -v` — all 6 tests should pass.
