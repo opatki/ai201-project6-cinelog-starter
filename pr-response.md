@@ -19,9 +19,11 @@
   - Queried `WatchlistEntry` afterward and confirmed the count was still 1.
 
 ## Comment 3 — Missing test
-**Comment:** Please add a test for the case where film_id doesn't exist in the database. Look at the existing tests in test_collection.py — the pattern is there.
 **What I did:**
+  - Created `tests/test_watchlist.py`, following the same `app`/`sample_user`/`sample_film` fixture structure as `tests/test_collection.py`.
+  - Added `test_add_to_watchlist_nonexistent_film_raises`, mirroring `test_add_to_collection_nonexistent_film_raises`: calls `add_to_watchlist()` with a fake UUID `film_id` and asserts it raises `FilmNotFoundError`.
 **How I verified:**
+  - Ran `pytest tests/test_watchlist.py -v` — the test passed.
 
 ## Comment 4 — Default visibility
 **Comment:** I notice watchlists default to public=True. We don't have a documented decision on default visibility for user lists. Before I can approve this, I need you to add a note to your PR description explaining your reasoning. I want to make sure we're being intentional here, not just inheriting a default.
