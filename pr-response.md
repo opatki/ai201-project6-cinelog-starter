@@ -118,3 +118,7 @@ There's no seed data or user/film-creation endpoint in this app, so the fastest 
 6. Add film2 to the watchlist the same way as step 3. Expect `201`.
 7. Fetch the watchlist: `curl http://127.0.0.1:5000/watchlist/<user_id>`. Expect a list of both films, with **film2 (Alien) listed first** since it was added most recently, each entry including `date_added` and `"public": true`.
 8. Run the automated suite: `pytest tests/ -v` — all 6 tests should pass.
+
+### Git Log Screenshot
+
+![Git Log Screenshot](Gitlog.png)
