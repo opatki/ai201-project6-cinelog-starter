@@ -4,14 +4,19 @@
 <!-- Fill in at the end — how you used AI tools during this project -->
 
 ## Comment 1 — Rename
-**Comment:** save_to_watchlist() should follow the project's naming convention. Compare with add_to_collection() — the pattern here is verb_to_noun. Please rename to add_to_watchlist() and update all call sites.
-**What I did:** I changed all occurrences of save_to_watchlist to add_to_watchlist in services/watchlist_service.py and routes/watchlist/watchlist.py
-**How I verified:** I checked my code editor's find-all-references to ensure I hadn't missed any occurrences
+**What I did:** 
+  - I changed all occurrences of `save_to_watchlist` to `add_to_watchlist` in `services/watchlist_service.py` and `routes/watchlist/watchlist.py`
+**How I verified:** 
+  - I checked my code editor's find-all-references to ensure I hadn't missed any occurrences
 
 ## Comment 2 — Deduplication
-**Comment:** What happens if a user calls this with a film that's already on their watchlist? The current implementation would add a duplicate entry. Please handle this case.
-**What I did:**
-**How I verified:**
+**What I did:** 
+  - Followed the same pattern as `add_to_collection()` in `services/collection_service.py`. 
+  - Added an `AlreadyOnWatchlistError` exception to `services/watchlist_service.py`, and in `add_to_watchlist()` added a check that queries for an existing `WatchlistEntry` with the same `user_id`/`film_id` before creating a new one, raising `AlreadyOnWatchlistError` if found. 
+  - Updated `routes/watchlist/watchlist.py` to catch this exception and return a 409 response, mirroring how `routes/collection.py` handles `AlreadyInCollectionError`.
+**How I verified:** 
+  - Ran a manual script against an in-memory SQLite app instance (`create_app` with `SQLALCHEMY_DATABASE_URI=sqlite:///:memory:`): added a film to a user's watchlist once (succeeded), then called `add_to_watchlist()` again with the same `user_id`/`film_id` and confirmed it raised `AlreadyOnWatchlistError` instead of creating a second row. 
+  - Queried `WatchlistEntry` afterward and confirmed the count was still 1.
 
 ## Comment 3 — Missing test
 **Comment:** Please add a test for the case where film_id doesn't exist in the database. Look at the existing tests in test_collection.py — the pattern is there.
